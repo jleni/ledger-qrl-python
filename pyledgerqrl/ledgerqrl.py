@@ -129,7 +129,26 @@ class LedgerQRL(object):
         self._connected = True
 
     def sign(self, message):
-        pass
+        if not self.connected:
+            raise Exception("Device is not connected or reacheable")
+
+        print("Signing...")
+        answer = self.send(INS_SIGN, 0, 0, message)
+        if answer is None:
+            raise Exception("Sign Operation Rejected")
+
+        signature = b''
+        for i in range(11):
+            answer = self.send(INS_SIGN_NEXT)
+            answer = binascii.hexlify(answer).upper()
+            signature += answer
+            if self.DEBUGMODE:
+                print("[{}] {}".format(len(answer) / 2, answer))
+
+        if self.DEBUGMODE:
+            print("[{}] {}".format(len(signature) / 2, signature))
+
+        return binascii.unhexlify(signature)
 
     def send(self, ins, p1=0, p2=0, params=None):
         answer = None
