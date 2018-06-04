@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='pyledgerqrl',
-    version='0.1',
+    version='0.2',
     description='python module for Ledger Nano S',
     url='https://github.com/theQRL/ledger-qrl',
     author='The QRL Team',

@@ -6,14 +6,14 @@ import time
 from ledgerblue import commU2F, comm
 from ledgerblue.commException import CommException
 
-CLA                     =0x77
+CLA = 0x77
 
-INS_VERSION             =0x00
-INS_GETSTATE            =0x01
-INS_KEYGEN              =0x02
-INS_PUBLIC_KEY          =0x03
-INS_SIGN                =0x04
-INS_SIGN_NEXT           =0x05
+INS_VERSION = 0x00
+INS_GETSTATE = 0x01
+INS_KEYGEN = 0x02
+INS_PUBLIC_KEY = 0x03
+INS_SIGN = 0x04
+INS_SIGN_NEXT = 0x05
 
 INS_TEST_PK_GEN_1 = 0x80
 INS_TEST_PK_GEN_2 = 0x81
@@ -21,55 +21,137 @@ INS_TEST_PK_GEN_2 = 0x81
 INS_TEST_WRITE_LEAF = 0x83
 INS_TEST_READ_LEAF = 0x84
 INS_TEST_DIGEST = 0x85
-INS_TEST_SET_STATE=0x88
+INS_TEST_SET_STATE = 0x88
 INS_TEST_COMM = 0x89
 
 last_error = 0
 
-APPMODE_NOT_INITIALIZED=0x00
-APPMODE_KEYGEN_RUNNING =0x01
-APPMODE_READY          =0x02
+APPMODE_NOT_INITIALIZED = 0x00
+APPMODE_KEYGEN_RUNNING = 0x01
+APPMODE_READY = 0x02
 
-SCRAMBLE_KEY = "QRL"
-U2FMODE = True
 
-def send(ins, p1=0, p2=0, params=None):
-    global last_error
+class LedgerQRL(object):
+    SCRAMBLE_KEY = "QRL"
+    U2FMODE = True
+    DEBUGMODE = False
 
-    answer = None
-    if params is None:
-        params = []
+    def __init__(self):
+        self.last_error = None
+        self._connected = False
 
-    params = bytearray([len(params)])+ bytearray(params)
+        self._test_mode = False
+        self._version_major = None
+        self._version_minor = None
+        self._version_patch = None
 
-    start = time.time()
-    dongle = None
-    try:
-        if U2FMODE:
-            dongle = commU2F.getDongle(scrambleKey=SCRAMBLE_KEY, debug=True)
-        else:
-            dongle = comm.getDongle(debug=True)
+        self._mode_str = 'unknown'
+        self._mode_code = -1
 
-        cmd_str = "{0:02x}{1:02x}{2:02x}{3:02x}".format(CLA, ins, p1, p2)
-        for p in params:
-            cmd_str = cmd_str + "{0:02x}".format(p)
+        self._pk = None
+        self._otsindex = None
 
-        answer = dongle.exchange(binascii.unhexlify(cmd_str))
-    except CommException as e:
-        print("COMMEXC: ", e)
-        last_error = e.sw
-    except Exception as e:
-        print("Exception: ", e)
-    except BaseException as e:
-        print("BaseException: ", e)
-    finally:
-        dongle.close()
+    @property
+    def connected(self):
+        return self._connected
 
-    if U2FMODE:
-        if answer is not None:
-            print("U2F[{}]: {}".format(len(answer), binascii.hexlify(answer)))
-            answer=answer[5:]
+    @property
+    def test_mode(self):
+        return self._test_mode
 
-    end = time.time()
-    print(end - start)
-    return answer
+    @property
+    def version(self):
+        return "{}.{}.{}".format(self._version_major, self._version_minor, self._version_patch)
+
+    @property
+    def mode(self):
+        return self._mode_str
+
+    @property
+    def mode_code(self):
+        return self._mode_code
+
+    @property
+    def pk(self):
+        return self._pk
+
+    def print_info(self):
+        if self._test_mode:
+            print("WARNING! TEST MODE ENABLED")
+        print("Version    : {}".format(self.version))
+        print("Mode       : {}".format(self.mode))
+
+        print("XMSS Index : {}".format(self._otsindex))
+
+        if self._pk:
+            print("Public Key : {}".format(self._pk))
+
+    def connect(self):
+        self.U2FMODE = False
+
+        # Check version
+        answer = self.send(INS_VERSION)
+        if answer is None:
+            return False
+
+        self._test_mode = (answer[0] != 0)
+        self._version_major = answer[1]
+        self._version_minor = answer[2]
+        self._version_patch = answer[3]
+
+        answer = self.send(INS_GETSTATE)
+        if answer is None:
+            return False
+
+        self._mode_val = answer[0]
+        self._mode_str = "Unknown"
+
+        self._otsindex = 1 + answer[1] + answer[2] * 256
+
+        if answer[0] == APPMODE_NOT_INITIALIZED:
+            self._mode_str = "not initialized"
+
+        if answer[0] == APPMODE_KEYGEN_RUNNING:
+            self._mode_str = "keygen running"
+
+        if answer[0] == APPMODE_READY:
+            self._mode_str = "ready"
+            answer = self.send(INS_PUBLIC_KEY)
+            self._pk = binascii.hexlify(answer).decode()
+
+    def send(self, ins, p1=0, p2=0, params=None):
+        answer = None
+        if params is None:
+            params = bytearray([])
+
+        start = time.time()
+        dongle = None
+        try:
+            if self.U2FMODE:
+                dongle = commU2F.getDongle(scrambleKey=self.SCRAMBLE_KEY, debug=self.DEBUGMODE)
+            else:
+                dongle = comm.getDongle(debug=self.DEBUGMODE)
+
+            cmd = bytearray([CLA, ins, p1, p2, len(params)]) + params
+            answer = dongle.exchange(cmd)
+        except CommException as e:
+            print("LEDGERQRL: COMMEXC: ", e)
+            self.last_error = e.sw
+        except Exception as e:
+            print("LEDGERQRL: Exception: ", e)
+        except BaseException as e:
+            print("LEDGERQRL: BaseException: ", e)
+        finally:
+            if dongle is not None:
+                dongle.close()
+
+        if self.U2FMODE:
+            if answer is not None:
+                if self.DEBUGMODE:
+                    print("U2F[{}]: {}".format(len(answer), binascii.hexlify(answer)))
+                answer = answer[5:]
+
+        end = time.time()
+        if self.DEBUGMODE:
+            print(end - start)
+        return answer
