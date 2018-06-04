@@ -48,7 +48,7 @@ class LedgerQRL(object):
         self._mode_str = 'unknown'
         self._mode_code = -1
 
-        self._pk = None
+        self._pk_raw = None
         self._otsindex = None
 
     @property
@@ -73,7 +73,14 @@ class LedgerQRL(object):
 
     @property
     def pk(self):
-        return self._pk
+        if self._pk_raw is None:
+            return None
+
+        return binascii.hexlify(self._pk_raw).decode()
+
+    @property
+    def pk_raw(self):
+        return self._pk_raw
 
     def print_info(self):
         if self._test_mode:
@@ -83,8 +90,8 @@ class LedgerQRL(object):
 
         print("XMSS Index : {}".format(self._otsindex))
 
-        if self._pk:
-            print("Public Key : {}".format(self._pk))
+        if self.pk:
+            print("Public Key : {}".format(self.pk))
 
     def connect(self):
         self.U2FMODE = False
@@ -117,7 +124,12 @@ class LedgerQRL(object):
         if answer[0] == APPMODE_READY:
             self._mode_str = "ready"
             answer = self.send(INS_PUBLIC_KEY)
-            self._pk = binascii.hexlify(answer).decode()
+            self._pk_raw = answer
+
+        self._connected = True
+
+    def sign(self, message):
+        pass
 
     def send(self, ins, p1=0, p2=0, params=None):
         answer = None
