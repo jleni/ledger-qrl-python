@@ -10,19 +10,18 @@ CLA = 0x77
 
 INS_VERSION = 0x00
 INS_GETSTATE = 0x01
-INS_KEYGEN = 0x02
 INS_PUBLIC_KEY = 0x03
 INS_SIGN = 0x04
 INS_SIGN_NEXT = 0x05
-
 INS_TEST_PK_GEN_1 = 0x80
 INS_TEST_PK_GEN_2 = 0x81
-
+INS_TEST_CALC_PK = 0x82
 INS_TEST_WRITE_LEAF = 0x83
 INS_TEST_READ_LEAF = 0x84
-INS_TEST_DIGEST = 0x85
-INS_TEST_SET_STATE = 0x88
-INS_TEST_COMM = 0x89
+INS_TEST_KEYGEN = 0x85
+INS_TEST_DIGEST = 0x86
+INS_TEST_SETSTATE = 0x87
+INS_TEST_COMM = 0x88
 
 last_error = 0
 
@@ -110,7 +109,7 @@ class LedgerQRL(object):
         if answer is None:
             return False
 
-        self._mode_val = answer[0]
+        self._mode_code = answer[0]
         self._mode_str = "Unknown"
 
         self._otsindex = 1 + answer[1] + answer[2] * 256
